@@ -1,0 +1,5 @@
+mkdir homeworks
+mkdir homeworks/{Homework1,Homework2,Homework3,Homework4,Homework5,Homework6,Homework7,Homework8}
+git add homeworks
+git commit -m "initial commit"
+git push
