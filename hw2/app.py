@@ -124,6 +124,23 @@ def format_conversation_history(history: list[dict[str, str]]) -> str:
     )
 
 
+def create_retrieval_query(question: str, history: list[dict[str, str]]) -> str:
+    """Add recent user questions to a Chroma query so follow-ups have context."""
+    recent_questions = [
+        exchange["question"]
+        for exchange in history[-2:]
+        if isinstance(exchange.get("question"), str)
+    ]
+    if not recent_questions:
+        return question
+
+    previous_topics = "\n".join(f"- {previous}" for previous in recent_questions)
+    return (
+        f"Current question: {question}\n\n"
+        f"Recent conversation topics:\n{previous_topics}"
+    )
+
+
 def save_exchange(question: str, answer: str) -> None:
     """Save one exchange in Chainlit session state and keep only recent history."""
     history = cl.user_session.get("conversation_history", [])
@@ -169,13 +186,15 @@ async def on_chat_start() -> None:
 
 @cl.on_message
 async def on_message(message: cl.Message) -> None:
-    """Answer using RAG plus recent session history and display retrieval scores."""
+    """Use session context for retrieval, then answer from newly retrieved documents."""
     question = message.content.strip()
     if not question:
         await cl.Message(content="Please enter a question.").send()
         return
 
-    retrieval_results = retrieve_documents(question)
+    history = cl.user_session.get("conversation_history", [])
+    retrieval_query = create_retrieval_query(question, history)
+    retrieval_results = retrieve_documents(retrieval_query)
     if not retrieval_results:
         save_exchange(question, FALLBACK_RESPONSE)
         await cl.Message(
@@ -187,7 +206,6 @@ async def on_message(message: cl.Message) -> None:
         return
 
     documents = [document for document, _ in retrieval_results]
-    history = cl.user_session.get("conversation_history", [])
     try:
         gemini_response = answer_chain.invoke(
             {
