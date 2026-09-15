@@ -54,23 +54,23 @@ def format_documents(documents: list) -> str:
     return "\n\n".join(document.page_content for document in documents)
 
 
-def source_names(documents: list) -> list[str]:
-    """Return unique source names from the retrieved document metadata."""
-    return sorted(
-        {
-            str(document.metadata.get("source", "Unknown source"))
-            for document in documents
-        }
-    )
-
-
-def retrieve_documents(query: str) -> list:
-    """Retrieve relevant documents, returning no documents below the score threshold."""
+def retrieve_documents(query: str) -> list[tuple]:
+    """Retrieve document-score pairs that meet the configured relevance threshold."""
     results = vectorstore.similarity_search_with_relevance_scores(query, k=RETRIEVER_K)
-    relevant_documents = [
-        document for document, score in results if score >= MIN_RELEVANCE
+    relevant_results = [
+        (document, score) for document, score in results if score >= MIN_RELEVANCE
     ]
-    return relevant_documents
+    return relevant_results
+
+
+def format_retrieval_results(retrieval_results: list[tuple]) -> str:
+    """Format each retrieved document's source metadata and relevance score."""
+    return "\n".join(
+        "- "
+        f"{document.metadata.get('source', 'Unknown source')} "
+        f"(relevance: {score:.3f})"
+        for document, score in retrieval_results
+    )
 
 
 prompt = ChatPromptTemplate.from_template(
@@ -105,17 +105,18 @@ async def on_chat_start() -> None:
 
 @cl.on_message
 async def on_message(message: cl.Message) -> None:
-    """Retrieve context for a question, generate an answer, and show its sources."""
+    """Answer from relevant context and display each document source and score."""
     question = message.content.strip()
     if not question:
         await cl.Message(content="Please enter a question.").send()
         return
 
-    documents = retrieve_documents(question)
-    if not documents:
+    retrieval_results = retrieve_documents(question)
+    if not retrieval_results:
         await cl.Message(content=FALLBACK_RESPONSE).send()
         return
 
+    documents = [document for document, _ in retrieval_results]
     answer = answer_chain.invoke(
         {
             "question": question,
@@ -123,8 +124,10 @@ async def on_message(message: cl.Message) -> None:
             "fallback_response": FALLBACK_RESPONSE,
         }
     )
-    sources = "\n".join(f"- {name}" for name in source_names(documents))
-    await cl.Message(content=f"{answer}\n\nSources:\n{sources}").send()
+    retrieved_documents = format_retrieval_results(retrieval_results)
+    await cl.Message(
+        content=f"{answer}\n\nRetrieved documents:\n{retrieved_documents}"
+    ).send()
 
 
 if __name__ == "__main__":
