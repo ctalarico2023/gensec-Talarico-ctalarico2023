@@ -18,6 +18,7 @@ RAG_DATABASE_PATH = os.getenv("RAG_DATABASE_PATH", str(COURSE_RAG_DIRECTORY))
 GOOGLE_CLOUD_LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "us-west1")
 RETRIEVER_K = int(os.getenv("RAG_RETRIEVER_K", "4"))
 MIN_RELEVANCE = float(os.getenv("RAG_MIN_RELEVANCE", "0.35"))
+HISTORY_EXCHANGES = int(os.getenv("RAG_HISTORY_EXCHANGES", "3"))
 FALLBACK_RESPONSE = (
     "I don't have enough information in the retrieved course documents to answer that question."
 )
@@ -73,10 +74,13 @@ def format_retrieval_results(retrieval_results: list[tuple]) -> str:
 
 
 def response_to_text(response: object) -> str:
-    """Extract displayable text from a Gemini string, AIMessage, or content blocks."""
+    """Extract text from Gemini responses, returning an empty string if unsupported."""
     content = getattr(response, "content", response)
     if isinstance(content, str):
         return content
+
+    if isinstance(content, dict) and isinstance(content.get("text"), str):
+        return content["text"]
 
     if isinstance(content, list):
         text_parts = []
@@ -85,16 +89,41 @@ def response_to_text(response: object) -> str:
                 text_parts.append(block)
             elif isinstance(block, dict) and isinstance(block.get("text"), str):
                 text_parts.append(block["text"])
+            elif isinstance(getattr(block, "text", None), str):
+                text_parts.append(block.text)
         return "\n".join(text_parts)
 
-    return str(content)
+    return ""
+
+
+def format_conversation_history(history: list[dict[str, str]]) -> str:
+    """Format recent question-and-answer exchanges for the Gemini prompt."""
+    if not history:
+        return "No previous conversation."
+
+    return "\n\n".join(
+        f"User: {exchange['question']}\nAssistant: {exchange['answer']}"
+        for exchange in history
+    )
+
+
+def save_exchange(question: str, answer: str) -> None:
+    """Save one exchange in Chainlit session state and keep only recent history."""
+    history = cl.user_session.get("conversation_history", [])
+    history.append({"question": question, "answer": answer})
+    cl.user_session.set("conversation_history", history[-HISTORY_EXCHANGES:])
 
 
 prompt = ChatPromptTemplate.from_template(
-    """You answer questions using only the retrieved context below.
+    """You answer questions using the retrieved context below as the primary factual source.
+Conversation history may help interpret follow-up questions, but do not use it as factual
+evidence when the retrieved context does not support an answer.
 If the context does not contain enough information, respond exactly with:
 {fallback_response}
 Keep a supported answer concise, with no more than three sentences.
+
+Recent conversation history:
+{history}
 
 Question: {question}
 
@@ -111,7 +140,8 @@ answer_chain = prompt | llm
 
 @cl.on_chat_start
 async def on_chat_start() -> None:
-    """Welcome the user to the Homework 2 RAG chat interface."""
+    """Create empty conversation history and welcome the user to the RAG chat."""
+    cl.user_session.set("conversation_history", [])
     await cl.Message(
         content=(
             "**Homework 2 RAG Chatbot**\n\n"
@@ -122,7 +152,7 @@ async def on_chat_start() -> None:
 
 @cl.on_message
 async def on_message(message: cl.Message) -> None:
-    """Answer from relevant context and display each document source and score."""
+    """Answer using RAG plus recent session history and display retrieval scores."""
     question = message.content.strip()
     if not question:
         await cl.Message(content="Please enter a question.").send()
@@ -130,21 +160,36 @@ async def on_message(message: cl.Message) -> None:
 
     retrieval_results = retrieve_documents(question)
     if not retrieval_results:
-        await cl.Message(content=FALLBACK_RESPONSE).send()
+        save_exchange(question, FALLBACK_RESPONSE)
+        await cl.Message(
+            content=(
+                f"{FALLBACK_RESPONSE}\n\n"
+                "Retrieved documents:\n- No documents met the relevance threshold."
+            )
+        ).send()
         return
 
     documents = [document for document, _ in retrieval_results]
+    history = cl.user_session.get("conversation_history", [])
     gemini_response = answer_chain.invoke(
         {
             "question": question,
             "context": format_documents(documents),
+            "history": format_conversation_history(history),
             "fallback_response": FALLBACK_RESPONSE,
         }
     )
-    answer = response_to_text(gemini_response).strip() or FALLBACK_RESPONSE
+    answer = response_to_text(gemini_response)
+    if not isinstance(answer, str) or not answer.strip():
+        answer = FALLBACK_RESPONSE
+    else:
+        answer = answer.strip()
+
+    save_exchange(question, answer)
     retrieved_documents = format_retrieval_results(retrieval_results)
+    response_content = f"{answer}\n\nRetrieved documents:\n{retrieved_documents}"
     await cl.Message(
-        content=f"{answer}\n\nRetrieved documents:\n{retrieved_documents}"
+        content=response_content
     ).send()
 
 
