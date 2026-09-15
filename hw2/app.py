@@ -10,6 +10,26 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_google_vertexai import VertexAIEmbeddings
 
 
+DEFAULT_HISTORY_EXCHANGES = 3
+
+
+def get_history_exchanges() -> int:
+    """Read a positive history limit, using the default when configuration is invalid."""
+    raw_value = os.getenv("RAG_HISTORY_EXCHANGES", str(DEFAULT_HISTORY_EXCHANGES))
+    try:
+        history_exchanges = int(raw_value)
+    except ValueError:
+        history_exchanges = 0
+
+    if history_exchanges <= 0:
+        print(
+            "Invalid RAG_HISTORY_EXCHANGES value; "
+            f"using the default of {DEFAULT_HISTORY_EXCHANGES}."
+        )
+        return DEFAULT_HISTORY_EXCHANGES
+    return history_exchanges
+
+
 # These values may be changed in the environment without editing this file.
 COURSE_RAG_DIRECTORY = (
     Path(__file__).resolve().parents[1] / "02_LangChain" / "07_RAG" / "rag_data" / ".chromadb"
@@ -18,7 +38,7 @@ RAG_DATABASE_PATH = os.getenv("RAG_DATABASE_PATH", str(COURSE_RAG_DIRECTORY))
 GOOGLE_CLOUD_LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "us-west1")
 RETRIEVER_K = int(os.getenv("RAG_RETRIEVER_K", "4"))
 MIN_RELEVANCE = float(os.getenv("RAG_MIN_RELEVANCE", "0.35"))
-HISTORY_EXCHANGES = int(os.getenv("RAG_HISTORY_EXCHANGES", "3"))
+HISTORY_EXCHANGES = get_history_exchanges()
 PREVIEW_LENGTH = 200
 FALLBACK_RESPONSE = (
     "I don't have enough information in the retrieved course documents to answer that question."
@@ -28,6 +48,9 @@ RATE_LIMIT_RESPONSE = (
     "Please try again in a few minutes."
 )
 API_ERROR_RESPONSE = "The AI service could not answer right now. Please try again later."
+RETRIEVAL_ERROR_RESPONSE = (
+    "The document search service is temporarily unavailable. Please try again later."
+)
 
 
 def create_vectorstore() -> Chroma:
@@ -208,7 +231,12 @@ async def on_message(message: cl.Message) -> None:
 
     history = cl.user_session.get("conversation_history", [])
     retrieval_query = create_retrieval_query(question, history)
-    retrieval_results = retrieve_documents(retrieval_query)
+    try:
+        retrieval_results = retrieve_documents(retrieval_query)
+    except Exception:
+        await cl.Message(content=RETRIEVAL_ERROR_RESPONSE).send()
+        return
+
     if not retrieval_results:
         save_exchange(question, FALLBACK_RESPONSE)
         await cl.Message(
