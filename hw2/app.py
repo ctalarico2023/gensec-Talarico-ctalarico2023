@@ -205,7 +205,8 @@ Answer:"""
 )
 
 vectorstore = create_vectorstore()
-llm = ChatGoogleGenerativeAI(model=os.getenv("GOOGLE_MODEL"))
+# Return quota errors to the Chainlit handler immediately instead of retrying them.
+llm = ChatGoogleGenerativeAI(model=os.getenv("GOOGLE_MODEL"), max_retries=0)
 answer_chain = prompt | llm
 
 
