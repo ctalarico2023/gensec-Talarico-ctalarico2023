@@ -19,6 +19,7 @@ GOOGLE_CLOUD_LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "us-west1")
 RETRIEVER_K = int(os.getenv("RAG_RETRIEVER_K", "4"))
 MIN_RELEVANCE = float(os.getenv("RAG_MIN_RELEVANCE", "0.35"))
 HISTORY_EXCHANGES = int(os.getenv("RAG_HISTORY_EXCHANGES", "3"))
+PREVIEW_LENGTH = 200
 FALLBACK_RESPONSE = (
     "I don't have enough information in the retrieved course documents to answer that question."
 )
@@ -69,13 +70,26 @@ def retrieve_documents(query: str) -> list[tuple]:
 
 
 def format_retrieval_results(retrieval_results: list[tuple]) -> str:
-    """Format each retrieved document's source metadata and relevance score."""
-    return "\n".join(
-        "- "
-        f"{document.metadata.get('source', 'Unknown source')} "
-        f"(relevance: {score:.3f})"
-        for document, score in retrieval_results
-    )
+    """Format numbered sources, scores, metadata, and short evidence previews."""
+    formatted_results = []
+    for number, (document, score) in enumerate(retrieval_results, start=1):
+        source = document.metadata.get("source", "Unknown source")
+        page = document.metadata.get("page", document.metadata.get("page_number"))
+        page_details = f", page: {page}" if page is not None else ""
+        preview = create_preview(document.page_content)
+        formatted_results.append(
+            f"{number}. {source} (relevance: {score:.3f}{page_details})\n"
+            f"   Preview: {preview}"
+        )
+    return "\n".join(formatted_results)
+
+
+def create_preview(page_content: str) -> str:
+    """Clean document text and limit it to a compact displayable evidence preview."""
+    clean_content = " ".join(page_content.split())
+    if len(clean_content) <= PREVIEW_LENGTH:
+        return clean_content
+    return f"{clean_content[:PREVIEW_LENGTH].rstrip()}..."
 
 
 def response_to_text(response: object) -> str:
