@@ -22,6 +22,11 @@ HISTORY_EXCHANGES = int(os.getenv("RAG_HISTORY_EXCHANGES", "3"))
 FALLBACK_RESPONSE = (
     "I don't have enough information in the retrieved course documents to answer that question."
 )
+RATE_LIMIT_RESPONSE = (
+    "The AI service is temporarily unavailable because the model request limit was reached. "
+    "Please try again in a few minutes."
+)
+API_ERROR_RESPONSE = "The AI service could not answer right now. Please try again later."
 
 
 def create_vectorstore() -> Chroma:
@@ -94,6 +99,18 @@ def response_to_text(response: object) -> str:
         return "\n".join(text_parts)
 
     return ""
+
+
+def is_rate_limit_error(error: Exception) -> bool:
+    """Return whether an API exception appears to be a quota or rate-limit error."""
+    error_text = str(error).upper()
+    return (
+        getattr(error, "code", None) == 429
+        or "429" in error_text
+        or "RESOURCE_EXHAUSTED" in error_text
+        or "RATE LIMIT" in error_text
+        or "QUOTA" in error_text
+    )
 
 
 def format_conversation_history(history: list[dict[str, str]]) -> str:
@@ -171,14 +188,25 @@ async def on_message(message: cl.Message) -> None:
 
     documents = [document for document, _ in retrieval_results]
     history = cl.user_session.get("conversation_history", [])
-    gemini_response = answer_chain.invoke(
-        {
-            "question": question,
-            "context": format_documents(documents),
-            "history": format_conversation_history(history),
-            "fallback_response": FALLBACK_RESPONSE,
-        }
-    )
+    try:
+        gemini_response = answer_chain.invoke(
+            {
+                "question": question,
+                "context": format_documents(documents),
+                "history": format_conversation_history(history),
+                "fallback_response": FALLBACK_RESPONSE,
+            }
+        )
+    except Exception as error:
+        error_response = (
+            RATE_LIMIT_RESPONSE if is_rate_limit_error(error) else API_ERROR_RESPONSE
+        )
+        retrieved_documents = format_retrieval_results(retrieval_results)
+        await cl.Message(
+            content=f"{error_response}\n\nRetrieved documents:\n{retrieved_documents}"
+        ).send()
+        return
+
     answer = response_to_text(gemini_response)
     if not isinstance(answer, str) or not answer.strip():
         answer = FALLBACK_RESPONSE
