@@ -5,7 +5,6 @@ from pathlib import Path
 
 import chainlit as cl
 from langchain_chroma import Chroma
-from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_google_vertexai import VertexAIEmbeddings
@@ -73,6 +72,24 @@ def format_retrieval_results(retrieval_results: list[tuple]) -> str:
     )
 
 
+def response_to_text(response: object) -> str:
+    """Extract displayable text from a Gemini string, AIMessage, or content blocks."""
+    content = getattr(response, "content", response)
+    if isinstance(content, str):
+        return content
+
+    if isinstance(content, list):
+        text_parts = []
+        for block in content:
+            if isinstance(block, str):
+                text_parts.append(block)
+            elif isinstance(block, dict) and isinstance(block.get("text"), str):
+                text_parts.append(block["text"])
+        return "\n".join(text_parts)
+
+    return str(content)
+
+
 prompt = ChatPromptTemplate.from_template(
     """You answer questions using only the retrieved context below.
 If the context does not contain enough information, respond exactly with:
@@ -89,7 +106,7 @@ Answer:"""
 
 vectorstore = create_vectorstore()
 llm = ChatGoogleGenerativeAI(model=os.getenv("GOOGLE_MODEL"))
-answer_chain = prompt | llm | StrOutputParser()
+answer_chain = prompt | llm
 
 
 @cl.on_chat_start
@@ -117,13 +134,14 @@ async def on_message(message: cl.Message) -> None:
         return
 
     documents = [document for document, _ in retrieval_results]
-    answer = answer_chain.invoke(
+    gemini_response = answer_chain.invoke(
         {
             "question": question,
             "context": format_documents(documents),
             "fallback_response": FALLBACK_RESPONSE,
         }
     )
+    answer = response_to_text(gemini_response).strip() or FALLBACK_RESPONSE
     retrieved_documents = format_retrieval_results(retrieval_results)
     await cl.Message(
         content=f"{answer}\n\nRetrieved documents:\n{retrieved_documents}"
