@@ -1,0 +1,8 @@
+[project]
+name = "hw3"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "langchain>=1.4.3",
+    "langchain-openai>=1.6.6",
+]

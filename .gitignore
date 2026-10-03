@@ -50,3 +50,5 @@ dist/
 *.egg
 pip-wheel-metadata/
 share/python-wheels/
+
+!hw3/pyproject.toml
