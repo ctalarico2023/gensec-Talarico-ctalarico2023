@@ -34,8 +34,37 @@ def terminal(command: str) -> str:
     return output or "Command completed with no output."
 
 
+@tool
+def read_file(relative_path: str) -> str:
+    """Read a text file whose path is relative to the homework directory."""
+    homework_dir = Path(__file__).resolve().parent
+    requested_path = Path(relative_path)
+
+    # Check both separator styles so traversal is rejected consistently.
+    path_parts = relative_path.replace("\\", "/").split("/")
+    if requested_path.is_absolute() or ".." in path_parts:
+        return "Error: file path must stay inside the homework directory."
+
+    file_path = (homework_dir / requested_path).resolve()
+    try:
+        file_path.relative_to(homework_dir)
+    except ValueError:
+        return "Error: file path must stay inside the homework directory."
+
+    try:
+        return file_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return f"Error: file not found: {relative_path}"
+    except IsADirectoryError:
+        return f"Error: path is a directory, not a file: {relative_path}"
+    except UnicodeDecodeError:
+        return f"Error: file is not valid UTF-8 text: {relative_path}"
+    except OSError as error:
+        return f"Error reading {relative_path}: {error}"
+
+
 def build_agent():
-    """Create the OpenRouter-backed agent and make the terminal tool available."""
+    """Create the OpenRouter-backed agent with terminal and file-reading tools."""
     api_key = os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
         raise ValueError("OPENROUTER_API_KEY is not set.")
@@ -45,7 +74,7 @@ def build_agent():
         api_key=api_key,
         base_url="https://openrouter.ai/api/v1",
     )
-    return create_agent(model=model, tools=[terminal])
+    return create_agent(model=model, tools=[terminal, read_file])
 
 
 def main() -> int:
