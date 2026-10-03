@@ -63,8 +63,31 @@ def read_file(relative_path: str) -> str:
         return f"Error reading {relative_path}: {error}"
 
 
+@tool
+def list_files() -> str:
+    """List files and directories in the homework directory, excluding .venv."""
+    homework_dir = Path(__file__).resolve().parent
+    paths: list[str] = []
+
+    for current_dir, dir_names, file_names in os.walk(homework_dir, followlinks=False):
+        dir_names[:] = sorted(name for name in dir_names if name != ".venv")
+        current_path = Path(current_dir)
+        paths.extend(
+            f"{(current_path / name).relative_to(homework_dir).as_posix()}/"
+            for name in dir_names
+        )
+        paths.extend(
+            (current_path / name).relative_to(homework_dir).as_posix()
+            for name in file_names
+        )
+
+    if not paths:
+        return "No files or directories found."
+    return "\n".join(sorted(paths))
+
+
 def build_agent():
-    """Create the OpenRouter-backed agent with terminal and file-reading tools."""
+    """Create the OpenRouter-backed agent with terminal and file tools."""
     api_key = os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
         raise ValueError("OPENROUTER_API_KEY is not set.")
@@ -74,7 +97,7 @@ def build_agent():
         api_key=api_key,
         base_url="https://openrouter.ai/api/v1",
     )
-    return create_agent(model=model, tools=[terminal, read_file])
+    return create_agent(model=model, tools=[terminal, read_file, list_files])
 
 
 def main() -> int:
