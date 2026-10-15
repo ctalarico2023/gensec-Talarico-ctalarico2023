@@ -1,1 +1,5 @@
 !pyproject.toml
+
+# Keep generated reports out of Git while retaining the reports directory.
+/reports/*
+!/reports/.gitkeep

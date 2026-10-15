@@ -15,3 +15,9 @@ python target.py
 Visit `http://127.0.0.1:5000/` to list the routes. The input-injection route
 accepts the fixed demo payload `demo' OR '1'='1` as the `payload` query value;
 other values are rejected. Keep all demonstrations on this local target.
+
+## MCP Filesystem integration
+
+The project will use the official MCP Filesystem server only to read generated
+reports. Configure its allowed directory as `hw4/reports/` and no broader path;
+the agent should expose only report-reading tools for this integration.
