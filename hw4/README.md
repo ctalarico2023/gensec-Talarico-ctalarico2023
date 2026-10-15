@@ -18,6 +18,19 @@ other values are rejected. Keep all demonstrations on this local target.
 
 ## MCP Filesystem integration
 
-The project will use the official MCP Filesystem server only to read generated
-reports. Configure its allowed directory as `hw4/reports/` and no broader path;
-the agent should expose only report-reading tools for this integration.
+The project uses the official
+[`@modelcontextprotocol/server-filesystem`](https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem)
+package, pinned to version `1.0.0`. The launch configuration is in
+`filesystem-server.json`; it passes only the absolute `hw4/reports/` directory
+as the server's allowed directory. It does not enable MCP Roots.
+
+The Filesystem server has tools that can modify files, so the future agent must
+filter its tool list and expose only `read_text_file` to the LLM. It must not
+expose write, edit, delete, move, or other Filesystem tools. The agent should
+use the server only to read generated reports from `hw4/reports/`.
+
+In Windows PowerShell, the equivalent launch command is:
+
+```powershell
+npx.cmd -y @modelcontextprotocol/server-filesystem@1.0.0 "C:\Users\colet\Downloads\gensec-Talarico-ctalarico2023\hw4\reports"
+```

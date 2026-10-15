@@ -1,0 +1,8 @@
+{
+  "command": "npx.cmd",
+  "args": [
+    "-y",
+    "@modelcontextprotocol/server-filesystem@1.0.0",
+    "C:\\Users\\colet\\Downloads\\gensec-Talarico-ctalarico2023\\hw4\\reports"
+  ]
+}
