@@ -1,0 +1,30 @@
+Prompt 1:
+
+I am building a Python Password Strength Checker for a cybersecurity assignment. Create a simple command-line application in app.py that allows a user to enter a password and evaluates its strength.
+
+The application should:
+- Check password length.
+- Check whether the password contains uppercase letters, lowercase letters, numbers, and special characters.
+- Classify the password as Weak, Moderate, or Strong.
+- Explain why the password received that rating.
+- Provide suggestions for improving weak passwords.
+
+Keep the application beginner-friendly and use standard Python libraries only. Do not use a graphical interface, external APIs, or a database.
+
+Security requirements:
+- Do not save, log, or transmit passwords.
+- Do not display the entered password in the results.
+- Handle empty input gracefully.
+- Explain that the strength rating is a basic estimate and does not guarantee that a password is secure.
+
+Implement the application directly in app.py. Keep the code readable and include helpful comments. Do not modify any other files.
+
+ 
+
+Prompt 2:
+
+Review the Password Strength Checker for potential security issues involving adversarial or unusual user input. Consider extremely long passwords, Unicode characters, whitespace, and unexpected control characters.
+
+Make reasonable improvements while keeping the application simple and beginner-friendly. The application must continue to hide password input and must never save, log, or transmit passwords. Make sure unusual input does not cause the program to crash.
+
+Do not add external libraries or unnecessary features. Explain the security improvements you made.
